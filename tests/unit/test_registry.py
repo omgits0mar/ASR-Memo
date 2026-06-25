@@ -16,13 +16,14 @@ from meeting_asr.models.registry import (
     prepare,
     refresh_state,
 )
-from meeting_asr.types import ModelAsset, ModelKind, ModelState
+from meeting_asr.types import ComputeBackend, ModelAsset, ModelFramework, ModelKind, ModelState
 
 
 def _asset(name="t", files=("model.onnx", "config.json")):
     return ModelAsset(
         name=name,
         kind=ModelKind.ASR,
+        framework=ModelFramework.ONNX,
         repo_id="org/test",
         revision="main",
         expected_files=files,
@@ -41,11 +42,22 @@ def _fake_downloader_ok(files):
 
 class TestRegistryDeclarations:
     def test_registry_has_asr_and_diarizer(self):
-        assets = {a.name: a for a in model_registry()}
         asr = next(a for a in model_registry() if a.kind is ModelKind.ASR)
         dia = next(a for a in model_registry() if a.kind is ModelKind.DIARIZER)
+        assert asr.framework is ModelFramework.ONNX
+        assert dia.framework is ModelFramework.COREML
         assert asr.expected_files and asr.supported_languages
         assert dia.kind is ModelKind.DIARIZER and dia.supported_languages is None
+
+    def test_cuda_registry_uses_nemo_assets(self):
+        assets = model_registry(ComputeBackend.CUDA)
+        assert {a.framework for a in assets} == {ModelFramework.NEMO}
+        assert next(a for a in assets if a.kind is ModelKind.ASR).expected_files == (
+            "nemotron-3.5-asr-streaming-0.6b.nemo",
+        )
+        assert next(a for a in assets if a.kind is ModelKind.DIARIZER).repo_id == (
+            "nvidia/diar_streaming_sortformer_4spk-v2.1"
+        )
 
 
 class TestCacheDetection:

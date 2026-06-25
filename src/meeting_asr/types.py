@@ -60,6 +60,14 @@ class ModelKind(str, Enum):
     DIARIZER = "diarizer"
 
 
+class ModelFramework(str, Enum):
+    """Runtime/model artifact format for a downloadable asset."""
+
+    COREML = "coreml"
+    ONNX = "onnx"
+    NEMO = "nemo"
+
+
 class ModelState(str, Enum):
     """Lifecycle of a downloadable model asset."""
 
@@ -89,6 +97,8 @@ class ComputeBackend(str, Enum):
     COREML_ANE = "coreml-ane"           # opt-in: MLComputeUnits=.all (ANE)
     MPS = "mps"                         # reference PyTorch-MPS path
     CPU = "cpu"                         # ONNX RT CPU EP fallback
+    CUDA = "cuda"                       # NeMo/PyTorch CUDA path
+    TORCH_CPU = "torch-cpu"             # NeMo/PyTorch CPU path
 
 
 # Thresholds for score → band derivation (FR-018). Tunable but centralized here.
@@ -257,6 +267,7 @@ class ModelAsset:
 
     name: str
     kind: ModelKind
+    framework: ModelFramework
     repo_id: str
     revision: str
     expected_files: Sequence[str] = field(default_factory=tuple)
@@ -276,6 +287,7 @@ class SystemReadinessReport:
     mic_permission: bool = False
     system_audio_permission: bool = False
     compute_backend: str = ComputeBackend.CPU.value
+    os_supports_system_audio: bool = False
     os_supports_process_tap: bool = False
     missing: list = field(default_factory=list)
 
@@ -290,6 +302,7 @@ __all__ = [
     "SessionStatus",
     "CaptureState",
     "ModelKind",
+    "ModelFramework",
     "ModelState",
     "ConfidenceBand",
     "ComputeBackend",

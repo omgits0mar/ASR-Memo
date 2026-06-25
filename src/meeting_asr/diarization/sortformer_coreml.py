@@ -36,6 +36,7 @@ from ..asr._features import LogMelFrontEnd
 from ..models.registry import default_cache_dir, model_registry, refresh_state
 from ..types import AudioFrame, ComputeBackend, DiarFrame, ModelKind
 from . import _streaming_state as ss
+from ._sortformer_decode import ACTIVATION_THRESHOLD, FRAME_SECONDS, SortformerFrameDecoder
 
 _log = get_logger("diarization.sortformer")
 
@@ -47,8 +48,6 @@ RIGHT_CONTEXT = 7  # right context chunks
 SUBSAMPLING = 8
 CORE_FRAMES = CHUNK_LEN * SUBSAMPLING  # 48 new mel frames per chunk (480 ms)
 WINDOW_FRAMES = (LEFT_CONTEXT + CHUNK_LEN + RIGHT_CONTEXT) * SUBSAMPLING  # 112
-FRAME_SECONDS = SUBSAMPLING * 160 / _SAMPLE_RATE  # 0.08 s per output frame
-ACTIVATION_THRESHOLD = 0.55  # per-frame speaker-prob threshold (reference: nemo_streaming_reference.py)
 
 
 class SortformerCoreMLDiarizer:
@@ -69,10 +68,7 @@ class SortformerCoreMLDiarizer:
         self._mel_cursor = 0  # mel frames already chunked (stt_feat)
         self._pcm_tail = np.zeros(0, dtype=np.float32)  # un-mel'd PCM carry
         self._mel_seeded = False  # center=True left-reflect pad applied once
-        self._emit_idx = 0  # global output frame counter → timestamps
-        # arrival-order speaker labelling (raw 0..3 → "Speaker N")
-        self._aosc_next = 1
-        self._label_map: dict[int, str] = {}
+        self._decoder = SortformerFrameDecoder()
 
     # ---- SpeakerDiarizer protocol ----
 
@@ -109,9 +105,7 @@ class SortformerCoreMLDiarizer:
         self._mel_cursor = 0
         self._pcm_tail = np.zeros(0, dtype=np.float32)
         self._mel_seeded = False
-        self._emit_idx = 0
-        self._aosc_next = 1
-        self._label_map = {}
+        self._decoder.reset()
 
     def push(self, frame: AudioFrame) -> List[DiarFrame]:
         if self._model is None:
@@ -225,29 +219,11 @@ class SortformerCoreMLDiarizer:
 
     def _decode(self, chunk_preds: np.ndarray) -> List[DiarFrame]:
         """[1, chunk_len, n_spk] probs → DiarFrames (80 ms each), arrival-order labels."""
-        frames = np.asarray(chunk_preds, dtype=np.float32).reshape(chunk_preds.shape[1], -1)
-        out: List[DiarFrame] = []
-        for probs in frames:
-            t0 = self._emit_idx * FRAME_SECONDS
-            t1 = t0 + FRAME_SECONDS
-            self._emit_idx += 1
-            active = np.where(probs > ACTIVATION_THRESHOLD)[0]
-            if active.size == 0:
-                continue  # silence: no active speaker this frame
-            # Dominant active speaker (highest prob); overlap keeps the loudest.
-            spk_raw = int(active[int(np.argmax(probs[active]))])
-            score = float(probs[spk_raw])
-            out.append(
-                DiarFrame(t_start=t0, t_end=t1, speaker_label=self._label_for(spk_raw), score=score)
-            )
-        return out
+        return self._decoder.decode(chunk_preds)
 
     def _label_for(self, raw_id: int) -> str:
         """Map a stable Sortformer speaker slot (0..3) to an arrival-order 'Speaker N'."""
-        if raw_id not in self._label_map:
-            self._label_map[raw_id] = f"Speaker {self._aosc_next}"
-            self._aosc_next += 1
-        return self._label_map[raw_id]
+        return self._decoder.label_for(raw_id)
 
 
 __all__ = ["SortformerCoreMLDiarizer"]

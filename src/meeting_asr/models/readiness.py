@@ -1,7 +1,7 @@
 """System readiness assembly (tasks T040; FR-013, FR-015).
 
 Builds :class:`SystemReadinessReport` from: model cache states, mic + system-audio
-permission probes, the resolved compute backend, and OS Process-Tap capability.
+permission probes, the resolved compute backend, and OS system-audio capability.
 Never raises for "not ready" — it enumerates what's missing.
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from .._logging import get_logger
-from ..backends.device import DeviceProbe, default_probe, resolve_backend
+from ..backends.device import DeviceProbe, resolve_backend
 from ..types import SystemReadinessReport
 from .registry import default_cache_dir, model_registry, refresh_state
 
@@ -33,6 +33,35 @@ def os_supports_process_tap() -> bool:
     return (major, minor) >= (_MIN_TAP_MAJOR, _MIN_TAP_MINOR)
 
 
+def _linux_has_monitor_source() -> bool:
+    """Best-effort PipeWire/PulseAudio monitor-source detection."""
+    try:
+        import sounddevice as sd  # type: ignore
+
+        devices = sd.query_devices()
+    except Exception:
+        return False
+    for dev in devices:
+        name = str(dev.get("name", "")).lower()
+        if int(dev.get("max_input_channels", 0) or 0) > 0 and (
+            ".monitor" in name or "monitor of" in name
+        ):
+            return True
+    return False
+
+
+def os_supports_system_audio() -> bool:
+    """True iff this OS has a supported system-audio loopback path."""
+    system = platform.system()
+    if system == "Darwin":
+        return os_supports_process_tap()
+    if system == "Windows":
+        return True
+    if system == "Linux":
+        return _linux_has_monitor_source()
+    return False
+
+
 def mic_permission() -> bool:
     """Best-effort microphone availability (default input device present).
 
@@ -48,11 +77,12 @@ def mic_permission() -> bool:
 
 
 def system_audio_permission() -> bool:
-    """Best-effort system-audio capture capability (Process Tap available).
+    """Best-effort system-audio capture capability.
 
-    The actual TCC prompt surfaces on the Swift helper's first run.
+    macOS TCC prompts on the Swift helper's first run; Windows/Linux device errors
+    surface from their capture backends.
     """
-    return os_supports_process_tap()
+    return os_supports_system_audio()
 
 
 def build_readiness(
@@ -62,10 +92,11 @@ def build_readiness(
 ) -> SystemReadinessReport:
     """Assemble the full readiness snapshot (FR-013). Never raises."""
     root = Path(cache_root or default_cache_dir())
-    models = [refresh_state(a, root) for a in model_registry()]
     backend = resolve_backend(probe)
+    models = [refresh_state(a, root) for a in model_registry(backend)]
     mic = mic_permission()
     sys_audio = system_audio_permission()
+    supports_system = os_supports_system_audio()
 
     missing: list[str] = []
     for a in models:
@@ -76,7 +107,7 @@ def build_readiness(
     # System audio is only required when a SYSTEM source is used; report as advisory.
     if not sys_audio:
         missing.append(
-            "system-audio (Process Tap) unavailable — required only for remote participants"
+            "system-audio loopback unavailable — required only for remote participants"
         )
 
     return SystemReadinessReport(
@@ -84,6 +115,7 @@ def build_readiness(
         mic_permission=mic,
         system_audio_permission=sys_audio,
         compute_backend=backend.value,
+        os_supports_system_audio=supports_system,
         os_supports_process_tap=os_supports_process_tap(),
         missing=missing,
     )
@@ -92,6 +124,7 @@ def build_readiness(
 __all__ = [
     "build_readiness",
     "os_supports_process_tap",
+    "os_supports_system_audio",
     "mic_permission",
     "system_audio_permission",
 ]

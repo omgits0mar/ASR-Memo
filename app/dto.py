@@ -8,7 +8,7 @@ bridge sends only these dicts over the webview channel (Constitution I + VII).
 
 from __future__ import annotations
 
-from typing import Mapping, Optional, Sequence
+from typing import Optional
 
 from meeting_asr.export.palette import SPEAKER_COLORS, speaker_color
 from meeting_asr.types import (
@@ -82,6 +82,7 @@ def _model_dto(asset: ModelAsset) -> dict:
     return {
         "name": asset.name,
         "kind": asset.kind.value if hasattr(asset.kind, "value") else str(asset.kind),
+        "framework": asset.framework.value if hasattr(asset.framework, "value") else str(asset.framework),
         "state": asset.state.value if hasattr(asset.state, "value") else str(asset.state),
         "is_cached": bool(asset.is_cached()),
     }
@@ -92,6 +93,7 @@ def readiness_dto(report: SystemReadinessReport) -> dict:
     return {
         "ready": bool(report.ready),
         "compute_backend": report.compute_backend,
+        "os_supports_system_audio": bool(getattr(report, "os_supports_system_audio", False)),
         "os_supports_process_tap": bool(report.os_supports_process_tap),
         "mic_permission": bool(report.mic_permission),
         "system_audio_permission": bool(report.system_audio_permission),

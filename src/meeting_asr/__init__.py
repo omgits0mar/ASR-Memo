@@ -11,11 +11,11 @@ See ``specs/001-meeting-asr-backend/contracts/public_api.md`` for the contract.
 
 from __future__ import annotations
 
+import platform
 import threading
 from dataclasses import dataclass
 from typing import Callable, Optional, Sequence
 
-from . import types as _types
 from ._logging import (
     CapturePermissionError,
     MeetingAsrError,
@@ -25,19 +25,20 @@ from ._logging import (
     configure_logging,
     get_logger,
 )
-from .asr.nemotron_onnx import NemotronOnnxTranscriber
+from .asr.transcriber import SpeechTranscriber
 from .audio.capture import AudioCapture
 from .audio.coreaudio_tap import CoreAudioTapCapture
 from .audio.microphone import MicrophoneCapture
 from .audio.mixer import CompositeCapture
 from .backends.device import default_probe, resolve_backend
+from .backends.factory import build_inference_backends
 from .diarization.diarizer import SpeakerDiarizer
-from .diarization.sortformer_coreml import SortformerCoreMLDiarizer
 from .fusion.aligner import Aligner
-from .models.readiness import build_readiness, os_supports_process_tap
-from .models.registry import model_registry, prepare as _prepare_assets
+from .models import readiness as _readiness
+from .models.readiness import build_readiness
+from .models.registry import model_registry
+from .models.registry import prepare as _prepare_assets
 from .pipeline import Pipeline
-from .asr.transcriber import SpeechTranscriber
 from .session import TranscriptionSession
 from .types import (
     AudioSource,
@@ -46,6 +47,7 @@ from .types import (
     ComputeBackend,
     ErrorInfo,
     ModelAsset,
+    ModelFramework,
     ModelKind,
     ModelState,
     PrepareProgress,
@@ -78,6 +80,7 @@ __all__ = [
     "SessionBusyError",
     "CapturePermissionError",
     "ModelAsset",
+    "ModelFramework",
     "ModelKind",
     "ModelState",
     "PrepareProgress",
@@ -103,7 +106,8 @@ def prepare_models(
     Idempotent; loads from cache without re-downloading when present. Resumable on
     interruption; never leaves a corrupt cache. Touches the network ONLY here.
     """
-    _prepare_assets(model_registry(), progress=progress, force=force)
+    backend = resolve_backend(default_probe())
+    _prepare_assets(model_registry(backend), progress=progress, force=force)
     return check_readiness()
 
 
@@ -234,10 +238,12 @@ def transcribe_file(
             capture: AudioCapture = FileCapture(path)
         except FileCaptureError as e:
             return _error_session(e.info, on_error=on_error)
+        backend = resolve_backend(default_probe())
+        diarizer, transcriber = build_inference_backends(backend)
         backends = Backends(
             capture=capture,
-            diarizer=SortformerCoreMLDiarizer(),
-            transcriber=NemotronOnnxTranscriber(),
+            diarizer=diarizer,
+            transcriber=transcriber,
         )
     else:
         capture = _backends.capture
@@ -288,18 +294,35 @@ def _build_default_backends(sources: Sequence[AudioSourceKind]) -> Backends:
     """Build production backends. MIC always; SYSTEM added via CompositeCapture (T032)."""
     kinds = set(sources)
     if AudioSourceKind.SYSTEM in kinds:
-        if not os_supports_process_tap():
+        if not _readiness.os_supports_system_audio():
             raise ReadinessError(
-                "system-audio capture (Core Audio Process Taps) requires macOS 14.4+; "
-                "use sources=(AudioSourceKind.MICROPHONE,) on this OS"
+                "system-audio capture is unavailable on this host; use "
+                "sources=(AudioSourceKind.MICROPHONE,) or configure OS loopback"
             )
         capture: AudioCapture = CompositeCapture(
-            [MicrophoneCapture(), CoreAudioTapCapture()]
+            [MicrophoneCapture(), _system_audio_capture()]
         )
     else:
         capture = MicrophoneCapture()
+    backend = resolve_backend(default_probe())
+    diarizer, transcriber = build_inference_backends(backend)
     return Backends(
         capture=capture,
-        diarizer=SortformerCoreMLDiarizer(),
-        transcriber=NemotronOnnxTranscriber(),
+        diarizer=diarizer,
+        transcriber=transcriber,
     )
+
+
+def _system_audio_capture() -> AudioCapture:
+    system = platform.system()
+    if system == "Darwin":
+        return CoreAudioTapCapture()
+    if system == "Windows":
+        from .audio.wasapi_loopback import WasapiLoopbackCapture
+
+        return WasapiLoopbackCapture()
+    if system == "Linux":
+        from .audio.pipewire_loopback import PipeWireLoopbackCapture
+
+        return PipeWireLoopbackCapture()
+    raise ReadinessError(f"system-audio capture is not supported on {system or 'this OS'}")
