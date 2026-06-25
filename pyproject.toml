@@ -1,0 +1,93 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meeting-asr"
+version = "0.1.0"
+description = "On-device, realtime, diarized, multilingual meeting transcription backend (in-process Python library)."
+readme = "README.md"
+requires-python = ">=3.9"   # declared reference runtime is Python 3.11 (see spec/plan); code is 3.9+-clean via `from __future__ import annotations`
+license = { text = "Proprietary" }
+authors = [{ name = "ASR_MeetingMinutes" }]
+keywords = ["asr", "diarization", "meeting", "nemotron", "sortformer", "on-device", "streaming"]
+
+# Core runtime dependencies (heavy ML deps are listed here so a normal install
+# is usable; each ML backend still lazy-imports its dep so unit/contract tests
+# run without onnxruntime/coremltools/sounddevice present).
+dependencies = [
+    "numpy>=1.26",
+    "soxr>=0.4",
+    "soundfile>=0.12",
+    "sounddevice>=0.4",
+    "onnxruntime>=1.17",
+    "coremltools>=7.0",
+    "huggingface_hub>=0.23",
+    "pywebview>=5.0",   # WKWebView desktop host + js_api bridge (002; UI host only, not inference)
+]
+
+[project.optional-dependencies]
+# Reference / validation paths only (NeMo + PyTorch-MPS). Not required for the
+# production ONNX Runtime + CoreML pipeline.
+reference = [
+    "nemo_toolkit[asr]",
+    "torch",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+    "black>=24.0",
+]
+# Dev-only: build the double-click .app (002 / US3). Not shipped in the runtime.
+packaging = [
+    "pyinstaller>=6.0",
+]
+# Dev/QA-only: accuracy-validation harness WER metric (002 / US5). Not shipped.
+# A pure-Python WER fallback keeps the harness usable when jiwer is absent.
+validation = [
+    "jiwer>=3.0",
+]
+
+# --- Packaging: src layout ---
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Ship the precomputed mel filterbank (NeMo-faithful log-mel front end) in the wheel.
+[tool.setuptools.package-data]
+"meeting_asr.asr" = ["*.npy"]
+
+# --- Ruff (lint + import sorting) ---
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = ["native", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]   # line length handled by black
+
+[tool.ruff.lint.isort]
+known-first-party = ["meeting_asr", "app", "validation", "tests"]
+
+# --- Black ---
+[tool.black]
+line-length = 100
+target-version = ["py311", "py39"]
+extend-exclude = "/(native|.venv|build|dist)/"
+
+# --- pytest ---
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra -q"
+filterwarnings = [
+    "error::UserWarning:meeting_asr.*",
+]
+markers = [
+    "offline: tests that must NOT touch the network (default; enforced by the network guard)",
+    "needs_models: tests requiring downloaded Nemotron/Sortformer models (deselect with -m 'not needs_models')",
+    "needs_hardware: tests requiring live mic/system-audio/CoreML hardware",
+    "slow: long-running soak / accuracy gates",
+]

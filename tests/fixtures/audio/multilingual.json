@@ -1,0 +1,41 @@
+{
+  "name": "multilingual",
+  "sample_rate": 16000,
+  "turns": [
+    {
+      "speaker": "Speaker 1",
+      "t_start": 0.2,
+      "t_end": 2.0,
+      "text": "hola buenos dias a todos",
+      "language": "es"
+    },
+    {
+      "speaker": "Speaker 2",
+      "t_start": 2.3,
+      "t_end": 4.1,
+      "text": "good morning everyone",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 1",
+      "t_start": 4.4,
+      "t_end": 6.2,
+      "text": "vamos a comenzar la reunion",
+      "language": "es"
+    },
+    {
+      "speaker": "Speaker 2",
+      "t_start": 6.5,
+      "t_end": 8.3,
+      "text": "lets get started with the meeting",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 1",
+      "t_start": 8.6,
+      "t_end": 10.4,
+      "text": "muchas gracias",
+      "language": "es"
+    }
+  ]
+}

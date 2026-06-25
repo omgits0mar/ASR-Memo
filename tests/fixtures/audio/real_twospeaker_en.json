@@ -1,0 +1,35 @@
+{
+  "name": "real_twospeaker_en",
+  "sample_rate": 16000,
+  "turns": [
+    {
+      "speaker": "Speaker 1",
+      "t_start": 0.0,
+      "t_end": 3.505,
+      "text": "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 1",
+      "t_start": 3.705,
+      "t_end": 8.73,
+      "text": "CONGRATULATIONS WERE POURED IN UPON THE PRINCESS EVERYWHERE DURING HER JOURNEY",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 2",
+      "t_start": 8.93,
+      "t_end": 16.765,
+      "text": "NOTWITHSTANDING THE HIGH RESOLUTION OF HAWKEYE HE FULLY COMPREHENDED ALL THE DIFFICULTIES AND DANGER HE WAS ABOUT TO INCUR",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 2",
+      "t_start": 16.965,
+      "t_end": 23.25,
+      "text": "THERE WAS SOMETHING IN HIS AIR AND MANNER THAT BETRAYED TO THE SCOUT THE UTTER CONFUSION OF THE STATE OF HIS MIND",
+      "language": "en"
+    }
+  ],
+  "_provenance": "Two sequential LibriSpeech test-clean utterances from distinct speakers (CC BY 4.0, https://openslr.org/12), concatenated with 0.2s gaps. Real speech so the Sortformer produces speaker activity (synthetic carrier-tone fixtures read as silence)."
+}

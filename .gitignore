@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+out/
+*.app
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Models / cache (downloaded by prepare_models; never committed)
+models_cache/
+*.onnx
+*.mlpackage/
+*.mlmodelc/
+
+# Audio fixtures are generated at test time (tests/fixtures/audio/*.wav) — keep
+# generators, ignore large generated clips unless explicitly tracked.
+tests/fixtures/audio/*.wav
+tests/fixtures/audio/*.flac
+tests/fixtures/tapdump/*.pcm
+tests/fixtures/tapdump/*.raw
+!tests/fixtures/audio/.gitkeep
+# Real-speech diarization fixture (LibriSpeech-derived, CC BY 4.0) — the
+# speech-trained Sortformer reads synthetic carrier-tone fixtures as silence, so
+# the DER gate needs real audio. Committed intentionally (not regenerated).
+!tests/fixtures/audio/real_twospeaker_en.wav
+!tests/fixtures/audio/real_twospeaker_en.json
+!tests/fixtures/tapdump/.gitkeep
+
+# Validation sample clips are fetched once then cached locally; manifests (the
+# ground-truth .json) are committed, the bulky audio is not.
+tests/fixtures/validation/*.wav
+tests/fixtures/validation/*.flac
+tests/fixtures/validation/*.mp3
+tests/fixtures/validation/*.ogg
+tests/fixtures/validation/*.m4a
+!tests/fixtures/validation/.gitkeep
+
+# Native build artifacts (Swift)
+.build/
+DerivedData/
+*.swiftpm/
+native/AudioTap/.build/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/

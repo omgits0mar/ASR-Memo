@@ -1,0 +1,41 @@
+{
+  "name": "two_speaker_en",
+  "sample_rate": 16000,
+  "turns": [
+    {
+      "speaker": "Speaker 1",
+      "t_start": 0.2,
+      "t_end": 1.8,
+      "text": "good morning team",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 2",
+      "t_start": 2.0,
+      "t_end": 3.6,
+      "text": "morning how are you",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 1",
+      "t_start": 3.9,
+      "t_end": 5.6,
+      "text": "ready to review the roadmap",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 2",
+      "t_start": 5.9,
+      "t_end": 7.6,
+      "text": "yes lets start with priorities",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 1",
+      "t_start": 7.9,
+      "t_end": 9.4,
+      "text": "sounds good to me",
+      "language": "en"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "_comment": "Curated validation sample set for US5 (002). Audio is fetched ONCE (one-time network; see README.md), then this manifest + the cached clips make `make validate` fully offline. `ref_text` for ASR clips comes from each dataset's own transcript files; diarization/language refs are recorded per clip. Metrics skip any axis whose ref is null.",
+  "samples": [
+    {
+      "sample_id": "librispeech-test-clean-1089-134686-0001",
+      "path": "librispeech/1089-134686-0001.flac",
+      "axis": "asr",
+      "ref_text": null,
+      "ref_turns": null,
+      "ref_languages": null,
+      "source": "LibriSpeech test-clean (CC BY 4.0, https://openslr.org/12); transcript from the matching .txt"
+    },
+    {
+      "sample_id": "librispeech-test-clean-1272-128104-0000",
+      "path": "librispeech/1272-128104-0000.flac",
+      "axis": "asr",
+      "ref_text": null,
+      "ref_turns": null,
+      "ref_languages": null,
+      "source": "LibriSpeech test-clean (CC BY 4.0, https://openslr.org/12); transcript from the matching .txt"
+    },
+    {
+      "sample_id": "ami-mixheadset-diar-1",
+      "path": "ami/ES2002a.Mix-Headset.short.wav",
+      "axis": "diarization",
+      "ref_text": null,
+      "ref_turns": null,
+      "ref_languages": null,
+      "source": "AMI Meeting Corpus (CC BY 4.0, https://groups.inf.ed.ac.uk/ami/corpus/); reference speaker turns from the RTTM"
+    },
+    {
+      "sample_id": "fleurs-en-short",
+      "path": "fleurs/en_short.wav",
+      "axis": "language",
+      "ref_text": null,
+      "ref_turns": null,
+      "ref_languages": [[0.0, 6.0, "en"]],
+      "source": "FLEURS (CC-BY-NC-4.0, https://github.com/google-research/datasets/tree/master/fleurs); known language label 'en'"
+    },
+    {
+      "sample_id": "fleurs-es-short",
+      "path": "fleurs/es_short.wav",
+      "axis": "language",
+      "ref_text": null,
+      "ref_turns": null,
+      "ref_languages": [[0.0, 6.0, "es"]],
+      "source": "FLEURS (CC-BY-NC-4.0, https://github.com/google-research/datasets/tree/master/fleurs); known language label 'es'"
+    },
+    {
+      "sample_id": "fleurs-ja-short",
+      "path": "fleurs/ja_short.wav",
+      "axis": "language",
+      "ref_text": null,
+      "ref_turns": null,
+      "ref_languages": [[0.0, 6.0, "ja"]],
+      "source": "FLEURS (CC-BY-NC-4.0, https://github.com/google-research/datasets/tree/master/fleurs); known language label 'ja'"
+    }
+  ]
+}

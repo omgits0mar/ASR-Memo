@@ -1,0 +1,27 @@
+{
+  "name": "single_speaker_en",
+  "sample_rate": 16000,
+  "turns": [
+    {
+      "speaker": "Speaker 1",
+      "t_start": 0.2,
+      "t_end": 1.6,
+      "text": "hello everyone lets begin the meeting",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 1",
+      "t_start": 2.0,
+      "t_end": 3.4,
+      "text": "the first item on the agenda is budget",
+      "language": "en"
+    },
+    {
+      "speaker": "Speaker 1",
+      "t_start": 3.8,
+      "t_end": 5.4,
+      "text": "we need to review the quarterly numbers",
+      "language": "en"
+    }
+  ]
+}

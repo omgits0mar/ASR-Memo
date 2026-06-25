@@ -1,0 +1,25 @@
+# ASR_MeetingMinutes — on-device diarized meeting transcription backend
+#
+# Install (one-time, network allowed):
+#   python3.11 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#   brew install portaudio   # system lib for sounddevice (mic capture)
+#
+# See pyproject.toml for the canonical dependency declaration + optional extras.
+
+# --- Core runtime (always required) ---
+numpy>=1.26
+soxr>=0.4              # high-quality resampling to 16 kHz mono
+soundfile>=0.12        # fixture WAV I/O (libsndfile)
+sounddevice>=0.4       # microphone capture via PortAudio (needs `brew install portaudio`)
+
+# --- Model runtime + lifecycle ---
+onnxruntime>=1.17      # Nemotron ASR (CoreML EP on Apple Silicon, CPU EP fallback)
+coremltools>=7.0       # Streaming Sortformer (CoreML) diarization
+huggingface_hub>=0.23  # resumable model download + cache (prepare_models)
+
+# --- Desktop UI host (002; WKWebView + js_api bridge — UI only, not inference) ---
+pywebview>=5.0
+
+# --- Test/dev ---
+pytest>=8.0

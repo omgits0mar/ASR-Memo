@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Info.plist.in — canonical macOS usage descriptions for MeetingAssistant.app
+  (task T035 / US3). build_app.sh merges these plain-language strings into the
+  generated bundle's Info.plist so the TCC permission prompts are clear.
+
+  The PyInstaller spec already embeds a copy; this file is the single source of
+  truth — keep them in sync (or rely on build_app.sh's PlistBuddy merge).
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Meeting Assistant</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.meetingassistant.app</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Microphone: live capture of nearby speech -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Meeting Assistant transcribes your meetings locally on your Mac. Microphone access is needed to capture nearby speech for live transcription.</string>
+
+    <!-- System audio: remote participants / meetings playing on the Mac (macOS 14.4+ Process Taps) -->
+    <key>NSSystemAudioRecordingUsageDescription</key>
+    <string>Meeting Assistant can transcribe remote participants by capturing system audio. The audio is processed on your device and never leaves your Mac.</string>
+
+    <!-- File import: reading user-chosen audio files for transcription -->
+    <key>NSAudioFileUsageDescription</key>
+    <string>Meeting Assistant reads audio files you choose so it can transcribe them locally on your Mac.</string>
+</dict>
+</plist>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meeting Assistant</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>Meeting Assistant</h1>
+    </div>
+    <div id="statusBadge" class="badge badge--muted">starting…</div>
+  </header>
+
+  <main id="app">
+    <!-- ───────────── Setup (US3) ───────────── -->
+    <section id="setup" class="screen">
+      <h2>First-run setup</h2>
+      <p class="lede">Everything runs locally on your Mac. Let's get the models and permissions ready.</p>
+      <ul id="readinessList" class="readiness" aria-live="polite"></ul>
+      <div class="actions">
+        <button id="refreshReadiness" class="btn btn--ghost">Check again</button>
+        <button id="prepareBtn" class="btn btn--primary">Download models</button>
+      </div>
+      <div id="prepareProgress" class="progress hidden">
+        <div class="progress__bar"><div id="prepareFill" class="progress__fill"></div></div>
+        <p id="prepareLabel" class="progress__label"></p>
+      </div>
+      <details class="permissions">
+        <summary>Permission guidance</summary>
+        <ul>
+          <li><strong>Microphone:</strong> System Settings → Privacy &amp; Security → Microphone → enable this app.</li>
+          <li><strong>System audio</strong> (remote participants; macOS 14.4+): approve the capture prompt on first run.</li>
+        </ul>
+      </details>
+    </section>
+
+    <!-- ───────────── Ready (US1 live start + US2 import) ───────────── -->
+    <section id="ready" class="screen hidden">
+      <h2>Start a session</h2>
+      <fieldset class="sources">
+        <legend>Sources</legend>
+        <label class="check"><input type="checkbox" id="srcMic" checked /> Microphone</label>
+        <label class="check"><input type="checkbox" id="srcSys" /> System audio</label>
+      </fieldset>
+      <label class="field">
+        <span>Language hint <em>(optional — leave blank to auto-detect per turn)</em></span>
+        <input type="text" id="langHint" placeholder="e.g. en, es, auto" />
+      </label>
+      <div class="actions">
+        <button id="startBtn" class="btn btn--primary">Start live</button>
+        <button id="importBtn" class="btn btn--ghost">Import audio…</button>
+      </div>
+    </section>
+
+    <!-- ───────────── Session (live/file in progress) ───────────── -->
+    <section id="session" class="screen hidden">
+      <div class="session__bar">
+        <div class="session__meta">
+          <span id="sessionMode" class="chip"></span>
+          <div id="fileProgress" class="progress progress--inline hidden">
+            <div class="progress__bar"><div id="fileFill" class="progress__fill"></div></div>
+          </div>
+        </div>
+        <button id="stopBtn" class="btn btn--primary">Stop</button>
+      </div>
+      <ol id="transcript" class="transcript" aria-live="polite"></ol>
+      <p id="emptyHint" class="empty hidden">Listening… the first lines appear within a couple of seconds.</p>
+    </section>
+
+    <!-- ───────────── Review (US4) ───────────── -->
+    <section id="review" class="screen hidden">
+      <div class="session__bar">
+        <h2 id="reviewTitle">Transcript</h2>
+        <div class="actions">
+          <button id="exportMd" class="btn btn--ghost">Export Markdown…</button>
+          <button id="exportJson" class="btn btn--ghost">Export JSON…</button>
+          <button id="newSession" class="btn btn--primary">New session</button>
+        </div>
+      </div>
+      <ol id="reviewTranscript" class="transcript"></ol>
+    </section>
+
+    <!-- ───────────── Error surface ───────────── -->
+    <div id="errorToast" class="toast hidden" role="alert">
+      <div>
+        <strong id="errTitle">Something went wrong</strong>
+        <p id="errMsg"></p>
+        <p id="errHint" class="toast__hint"></p>
+      </div>
+      <button id="errClose" class="btn btn--ghost btn--sm">Dismiss</button>
+    </div>
+  </main>
+
+  <footer class="footnote">On-device · nothing leaves your Mac</footer>
+  <script src="app.js"></script>
+</body>
+</html>
