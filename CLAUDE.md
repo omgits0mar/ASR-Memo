@@ -70,6 +70,10 @@ so unit/contract/integration tests run offline with deterministic fakes. Follow
 standard conventions; `ruff`/`black` configured in `pyproject.toml`.
 
 ## Recent Changes
+- Cross-platform plan (proposed, not yet implemented): `docs/plans/cross-platform-nemo.md`
+  — unified macOS/Linux/Windows app. macOS keeps the CoreML/ONNX path; Linux/Windows
+  add native NVIDIA **NeMo** backends (CUDA, torch-CPU fallback) behind the existing
+  protocols, plus WASAPI/PipeWire loopback capture and an optional `nemo` dep extra.
 - Repo published as `omgits0mar/ASR-Memo` (public); README rebranded to ASR-Memo
   with NVIDIA / Hugging Face model references.
 - 002-macos-app-ui (implemented): pywebview WKWebView desktop app on top of the 001
