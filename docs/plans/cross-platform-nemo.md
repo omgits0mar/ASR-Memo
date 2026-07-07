@@ -1,12 +1,10 @@
 # Implementation Plan: Cross-Platform Unified App (macOS / Linux / Windows, NVIDIA GPU + CPU)
 
-> **Status:** Approved, implementation-ready.
-> **How to start implementation:** When the maintainer gives the go-ahead flag,
-> Claude should execute the workstreams below **in order** (1 → 6). Workstream 2's
-> "NeMo streaming word-level timestamps" spike (see Risks) must be validated before
-> writing the rest of the NeMo ASR backend. Use TDD with the existing offline fakes;
-> do not break the macOS CoreML/ONNX path. Confirm the two open items under
-> "Confirm-before-coding" before downloading models.
+> **Status: SUPERSEDED (2026-07-07) — do not implement.** Replaced by
+> `docs/plans/asr-memo-v2-rust-core.md` (Tauri + full Rust core, ONNX Runtime
+> everywhere; spec in `docs/superpowers/specs/2026-07-07-asr-memo-v2-rust-core-design.md`).
+> The NeMo/PyTorch backend approach below was retired after the meetily analysis
+> showed ONNX Runtime suffices cross-platform. Kept for historical context only.
 
 ## Context
 
