@@ -57,8 +57,10 @@ fn speakers_view(segments: &[SegmentDto]) -> Vec<SpeakerDto> {
         .into_iter()
         .enumerate()
         .map(|(i, label)| {
-            let segs: Vec<&SegmentDto> =
-                segments.iter().filter(|s| s.speaker_label == label).collect();
+            let segs: Vec<&SegmentDto> = segments
+                .iter()
+                .filter(|s| s.speaker_label == label)
+                .collect();
             SpeakerDto {
                 color: COLORS[i % COLORS.len()].into(),
                 total_speech_seconds: segs.iter().map(|s| s.end - s.start).sum(),
@@ -101,7 +103,11 @@ pub fn start_live<R: Runtime>(
 ) -> serde_json::Value {
     let _ = sources; // fake mode ignores source selection
     if state.session.lock().unwrap().is_some() {
-        return err("busy", "a session is already running", "Stop the current session first.");
+        return err(
+            "busy",
+            "a session is already running",
+            "Stop the current session first.",
+        );
     }
     state.transcript.lock().unwrap().clear();
 
@@ -151,10 +157,18 @@ pub fn export_transcript(
 ) -> serde_json::Value {
     let segments = state.transcript.lock().unwrap().clone();
     if segments.is_empty() {
-        return err("export.empty", "no transcript to export", "Produce a transcript first, then export.");
+        return err(
+            "export.empty",
+            "no transcript to export",
+            "Produce a transcript first, then export.",
+        );
     }
     let fmt = format.unwrap_or_else(|| {
-        if path.ends_with(".json") { "json".into() } else { "markdown".into() }
+        if path.ends_with(".json") {
+            "json".into()
+        } else {
+            "markdown".into()
+        }
     });
     let body = match fmt.as_str() {
         "json" => serde_json::to_string_pretty(
@@ -163,19 +177,31 @@ pub fn export_transcript(
         .unwrap(),
         "markdown" | "md" => render_markdown(&segments),
         other => {
-            return err("export.format", &format!("unknown format: {other}"), "Choose Markdown (.md) or JSON (.json).")
+            return err(
+                "export.format",
+                &format!("unknown format: {other}"),
+                "Choose Markdown (.md) or JSON (.json).",
+            )
         }
     };
     match std::fs::write(&path, body) {
         Ok(()) => serde_json::json!({"path": path}),
-        Err(e) => err("export.write_failed", &e.to_string(), "Could not write the file — check disk space and the chosen path."),
+        Err(e) => err(
+            "export.write_failed",
+            &e.to_string(),
+            "Could not write the file — check disk space and the chosen path.",
+        ),
     }
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn transcribe_file(path: String, language_hint: Option<String>) -> serde_json::Value {
     let _ = (path, language_hint);
-    err("not_implemented", "file import lands in Phase 3 (ASR port)", "Use Start (live fake demo) in Phase 1.")
+    err(
+        "not_implemented",
+        "file import lands in Phase 3 (ASR port)",
+        "Use Start (live fake demo) in Phase 1.",
+    )
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -237,10 +263,18 @@ mod tests {
 
     #[test]
     fn status_and_error_event_payloads_match_bridge_contract() {
-        let v = event_payload(&asr_memo_core::session::SessionEvent::Status("recording".into()));
-        assert_eq!(v, serde_json::json!({"type": "status", "status": "recording"}));
+        let v = event_payload(&asr_memo_core::session::SessionEvent::Status(
+            "recording".into(),
+        ));
+        assert_eq!(
+            v,
+            serde_json::json!({"type": "status", "status": "recording"})
+        );
         let e = asr_memo_core::types::ErrorInfoDto {
-            code: "x".into(), message: "m".into(), recoverable: true, hint: None,
+            code: "x".into(),
+            message: "m".into(),
+            recoverable: true,
+            hint: None,
         };
         let v = event_payload(&asr_memo_core::session::SessionEvent::Error(e));
         assert_eq!(v["type"], "error");

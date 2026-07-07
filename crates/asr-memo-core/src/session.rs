@@ -28,7 +28,13 @@ struct MidpointAligner {
 
 impl MidpointAligner {
     fn new(language: Option<String>) -> Self {
-        Self { diar: Vec::new(), pending: Vec::new(), seen_speakers: Vec::new(), next_segment_id: 1, language }
+        Self {
+            diar: Vec::new(),
+            pending: Vec::new(),
+            seen_speakers: Vec::new(),
+            next_segment_id: 1,
+            language,
+        }
     }
 
     fn label_for(&mut self, raw: u8) -> String {
@@ -40,7 +46,11 @@ impl MidpointAligner {
     }
 
     fn speaker_at(&self, t: f64) -> Option<u8> {
-        self.diar.iter().rev().find(|f| f.t <= t).and_then(|f| f.speaker)
+        self.diar
+            .iter()
+            .rev()
+            .find(|f| f.t <= t)
+            .and_then(|f| f.speaker)
     }
 
     fn feed(&mut self, tokens: Vec<AsrToken>, diar: Vec<DiarFrame>) -> Vec<SegmentDto> {
@@ -69,10 +79,19 @@ impl MidpointAligner {
     fn close_segment(&mut self) -> SegmentDto {
         let toks = std::mem::take(&mut self.pending);
         let label = toks[0].1.clone();
-        let text = toks.iter().map(|(t, _)| t.text.as_str()).collect::<Vec<_>>().join(" ");
-        let confidence =
-            toks.iter().map(|(t, _)| t.confidence).sum::<f64>() / toks.len() as f64;
-        let band = if confidence >= 0.8 { "high" } else if confidence >= 0.5 { "medium" } else { "low" };
+        let text = toks
+            .iter()
+            .map(|(t, _)| t.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let confidence = toks.iter().map(|(t, _)| t.confidence).sum::<f64>() / toks.len() as f64;
+        let band = if confidence >= 0.8 {
+            "high"
+        } else if confidence >= 0.5 {
+            "medium"
+        } else {
+            "low"
+        };
         let seg = SegmentDto {
             segment_id: format!("seg-{}", self.next_segment_id),
             speaker_label: label,
@@ -90,7 +109,11 @@ impl MidpointAligner {
     }
 
     fn flush(&mut self) -> Vec<SegmentDto> {
-        if self.pending.is_empty() { Vec::new() } else { vec![self.close_segment()] }
+        if self.pending.is_empty() {
+            Vec::new()
+        } else {
+            vec![self.close_segment()]
+        }
     }
 }
 
@@ -134,7 +157,11 @@ impl Session {
             let _ = cb_tx.send(Some(f));
         }))?;
 
-        Ok(Session { capture, frame_tx, worker })
+        Ok(Session {
+            capture,
+            frame_tx,
+            worker,
+        })
     }
 
     pub fn stop(mut self) {
@@ -162,9 +189,24 @@ mod tests {
             })
             .collect();
         let tokens = vec![
-            AsrToken { text: "hello".into(), t_start: 0.10, t_end: 0.40, confidence: 0.9 },
-            AsrToken { text: "there".into(), t_start: 0.45, t_end: 0.80, confidence: 0.9 },
-            AsrToken { text: "hi".into(), t_start: 1.20, t_end: 1.50, confidence: 0.7 },
+            AsrToken {
+                text: "hello".into(),
+                t_start: 0.10,
+                t_end: 0.40,
+                confidence: 0.9,
+            },
+            AsrToken {
+                text: "there".into(),
+                t_start: 0.45,
+                t_end: 0.80,
+                confidence: 0.9,
+            },
+            AsrToken {
+                text: "hi".into(),
+                t_start: 1.20,
+                t_end: 1.50,
+                confidence: 0.7,
+            },
         ];
         let (tx, rx) = mpsc::channel();
         let session = Session::run(

@@ -20,7 +20,10 @@ pub struct FakeCapture {
 
 impl FakeCapture {
     pub fn from_script(script: Vec<AudioFrame>) -> Self {
-        Self { script: Some(script), handle: None }
+        Self {
+            script: Some(script),
+            handle: None,
+        }
     }
 }
 
@@ -92,7 +95,10 @@ impl SpeakerDiarizer for FakeDiarizer {
         let mut t = frame.t_start;
         while t < frame.t_end - 1e-9 {
             let speaker = ((t / self.period_secs) as u64 % 2) as u8;
-            out.push(DiarFrame { t, speaker: Some(speaker) });
+            out.push(DiarFrame {
+                t,
+                speaker: Some(speaker),
+            });
             t += STEP;
         }
         out
@@ -114,13 +120,27 @@ pub fn demo_script(seconds: f64) -> (Vec<AudioFrame>, Vec<AsrToken>) {
         });
         t = t1;
     }
-    let words = ["this", "is", "a", "fake", "session", "streaming", "live", "segments"];
+    let words = [
+        "this",
+        "is",
+        "a",
+        "fake",
+        "session",
+        "streaming",
+        "live",
+        "segments",
+    ];
     let tokens = words
         .iter()
         .enumerate()
         .map(|(i, w)| {
             let t0 = 0.2 + i as f64 * (seconds - 0.4) / words.len() as f64;
-            AsrToken { text: (*w).into(), t_start: t0, t_end: t0 + 0.25, confidence: 0.92 }
+            AsrToken {
+                text: (*w).into(),
+                t_start: t0,
+                t_end: t0 + 0.25,
+                confidence: 0.92,
+            }
         })
         .filter(|tok| tok.t_end < seconds)
         .collect();
@@ -135,7 +155,12 @@ mod tests {
 
     fn frame(t0: f64, t1: f64) -> AudioFrame {
         let n = ((t1 - t0) * 16000.0) as usize;
-        AudioFrame { pcm: vec![0.0; n], t_start: t0, t_end: t1, source: AudioSource::Microphone }
+        AudioFrame {
+            pcm: vec![0.0; n],
+            t_start: t0,
+            t_end: t1,
+            source: AudioSource::Microphone,
+        }
     }
 
     #[test]
@@ -154,8 +179,18 @@ mod tests {
     #[test]
     fn fake_transcriber_releases_tokens_by_frame_time() {
         let tokens = vec![
-            AsrToken { text: "hello".into(), t_start: 0.2, t_end: 0.5, confidence: 0.9 },
-            AsrToken { text: "world".into(), t_start: 0.6, t_end: 0.9, confidence: 0.8 },
+            AsrToken {
+                text: "hello".into(),
+                t_start: 0.2,
+                t_end: 0.5,
+                confidence: 0.9,
+            },
+            AsrToken {
+                text: "world".into(),
+                t_start: 0.6,
+                t_end: 0.9,
+                confidence: 0.8,
+            },
         ];
         let mut asr = FakeTranscriber::with_tokens(tokens);
         let out1 = asr.push(&frame(0.0, 0.5));
