@@ -111,6 +111,15 @@ pub fn start_live<R: Runtime>(
     }
     state.transcript.lock().unwrap().clear();
 
+    // Emit "starting" synchronously before the worker spawns (mirrors
+    // app/bridge.py:252), so the UI badge transitions starting → recording
+    // rather than the worker's "recording" being clobbered by the resolved
+    // invoke handler running beginSession("starting") afterward.
+    let _ = app.emit(
+        "backend-event",
+        event_payload(&SessionEvent::Status("starting".into())),
+    );
+
     let (frames, tokens) = demo_script(8.0);
     let app_for_events = app.clone();
     let session = Session::run(
@@ -298,5 +307,33 @@ mod tests {
         let md = render_markdown(&[seg]);
         assert!(md.contains("**S1**"));
         assert!(md.contains("hello world"));
+    }
+
+    #[test]
+    fn speakers_view_assigns_palette_and_sums_speech() {
+        let mk = |label: &str, start: f64, end: f64| asr_memo_core::types::SegmentDto {
+            segment_id: format!("s-{label}-{start}"),
+            speaker_label: label.into(),
+            start,
+            end,
+            text: "x".into(),
+            language: None,
+            confidence: 0.9,
+            confidence_band: Some("high".into()),
+            source: None,
+            is_final: true,
+        };
+        // S1 appears twice (non-contiguous) → arrival order first, durations summed.
+        let segs = vec![mk("S1", 0.0, 2.0), mk("S2", 2.0, 3.0), mk("S1", 5.0, 6.0)];
+        let spk = speakers_view(&segs);
+        assert_eq!(spk.len(), 2);
+        assert_eq!(spk[0].label, "S1");
+        assert_eq!(spk[0].color, "#1A7F64");
+        assert_eq!(spk[0].total_speech_seconds, 3.0); // (2-0) + (6-5)
+        assert_eq!(spk[0].segment_count, 2);
+        assert_eq!(spk[1].label, "S2");
+        assert_eq!(spk[1].color, "#2D7FF9");
+        assert_eq!(spk[1].total_speech_seconds, 1.0); // (3-2)
+        assert_eq!(spk[1].segment_count, 1);
     }
 }
