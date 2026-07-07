@@ -4,3 +4,4 @@
 pub mod types;
 pub mod traits;
 pub mod fakes;
+pub mod session;
