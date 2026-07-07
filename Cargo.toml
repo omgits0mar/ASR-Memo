@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/asr-memo-core"]
+members = ["crates/asr-memo-core", "crates/asr-memo-app"]
 
 [workspace.package]
 edition = "2021"
