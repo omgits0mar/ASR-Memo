@@ -2,3 +2,5 @@
 //! JSON contracts here are locked to the Python bridge (`app/dto.py`).
 
 pub mod types;
+pub mod traits;
+pub mod fakes;
