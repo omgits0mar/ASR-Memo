@@ -214,28 +214,39 @@ pub fn transcribe_file(path: String, language_hint: Option<String>) -> serde_jso
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn pick_audio_file<R: Runtime>(app: AppHandle<R>) -> serde_json::Value {
-    use tauri_plugin_dialog::DialogExt;
-    let path = app
-        .dialog()
-        .file()
-        .add_filter("Audio", &["wav", "flac", "mp3", "m4a"])
-        .blocking_pick_file()
-        .and_then(|p| p.as_path().map(|p| p.to_string_lossy().into_owned()));
+pub async fn pick_audio_file<R: Runtime>(app: AppHandle<R>) -> serde_json::Value {
+    // blocking_pick_file() must NOT run on the main thread or an async-runtime
+    // worker — it freezes the app (tauri-plugin-dialog docs; meetily hit the
+    // same bug and wraps the call in spawn_blocking). Run it on the blocking pool.
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+        app.dialog()
+            .file()
+            .add_filter("Audio", &["wav", "flac", "mp3", "m4a"])
+            .blocking_pick_file()
+            .and_then(|p| p.as_path().map(|p| p.to_string_lossy().into_owned()))
+    })
+    .await
+    .ok()
+    .flatten();
     serde_json::json!({"path": path})
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn pick_export_path<R: Runtime>(app: AppHandle<R>, format: String) -> serde_json::Value {
-    use tauri_plugin_dialog::DialogExt;
+pub async fn pick_export_path<R: Runtime>(app: AppHandle<R>, format: String) -> serde_json::Value {
     let ext = if format == "json" { "json" } else { "md" };
-    let path = app
-        .dialog()
-        .file()
-        .add_filter(&format, &[ext])
-        .set_file_name(format!("transcript.{ext}"))
-        .blocking_save_file()
-        .and_then(|p| p.as_path().map(|p| p.to_string_lossy().into_owned()));
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+        app.dialog()
+            .file()
+            .add_filter(&format, &[ext])
+            .set_file_name(format!("transcript.{ext}"))
+            .blocking_save_file()
+            .and_then(|p| p.as_path().map(|p| p.to_string_lossy().into_owned()))
+    })
+    .await
+    .ok()
+    .flatten();
     serde_json::json!({"path": path})
 }
 
