@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the main window. Tauri 2 denies IPC by default; core:default covers core APIs and we add core:event:allow-listen explicitly so the backend-event stream (segments/status/errors) reaches the webview shim.",
+  "windows": ["main"],
+  "permissions": ["core:default", "core:event:allow-listen"]
+}

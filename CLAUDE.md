@@ -70,6 +70,15 @@ so unit/contract/integration tests run offline with deterministic fakes. Follow
 standard conventions; `ruff`/`black` configured in `pyproject.toml`.
 
 ## Recent Changes
+- **ASR-Memo v2 direction (approved 2026-07-07, not yet implemented):** rewrite the
+  shell as **Tauri 2.x + full Rust core** (meetily-informed) — Rust audio engine
+  (cpal / cidre global tap / WASAPI loopback, dynamic mixing, Silero VAD, health
+  monitoring) + `ort` ports of Nemotron streaming ASR and Sortformer diarization.
+  Spec: `docs/superpowers/specs/2026-07-07-asr-memo-v2-rust-core-design.md`; master
+  plan: `docs/plans/asr-memo-v2-rust-core.md`; Phase-1 plan:
+  `docs/superpowers/plans/2026-07-07-v2-phase1-tauri-shell.md`. The NeMo/torch plan
+  (`docs/plans/cross-platform-nemo.md`) is **superseded**. Python app + library stay
+  working as the reference implementation until the v2 parity gate.
 - Repo published as `omgits0mar/ASR-Memo` (public); README rebranded to ASR-Memo
   with NVIDIA / Hugging Face model references.
 - 002-macos-app-ui (implemented): pywebview WKWebView desktop app on top of the 001
