@@ -82,7 +82,9 @@ fn dynamic_ratios(mic_r: f32, sys_r: f32) -> (f32, f32) {
     (mr, 1.0 - mr)
 }
 
-/// Scale-down only when peak > 1.0 (never amplifies; keeps |x| ≤ 1).
+/// Defensive: under `dynamic_ratios`'s sum-to-1.0 invariant with bounded
+/// inputs, the mixed output already stays within ±1.0, so this rarely fires.
+/// It guards float edge cases and any future change to the ratio/clamp logic.
 fn soft_scale(mixed: &mut [f32]) {
     let peak = mixed.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
     if peak > 1.0 {
@@ -260,7 +262,30 @@ mod tests {
     }
 
     #[test]
-    fn soft_scales_when_sum_exceeds_unity() {
+    fn soft_scale_reduces_peak_above_unity_preserving_shape() {
+        let mut v = vec![0.5f32, 1.5, -1.2, 0.0];
+        // relative shape: 1.5 is the peak (abs 1.5); scale = 1/1.5
+        soft_scale(&mut v);
+        let peak = v.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
+        assert!(
+            peak <= 1.0 + 1e-6,
+            "peak {peak} must be <= 1.0 after soft_scale"
+        );
+        // shape preserved: the largest-magnitude element (index 1, was 1.5) stays largest
+        assert_eq!(
+            v.iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.abs().partial_cmp(&b.abs()).unwrap())
+                .map(|(i, _)| i),
+            Some(1)
+        );
+        // the 1.5 element scaled by 1/1.5 == 1.0 exactly
+        assert!((v[1] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn mixed_output_never_exceeds_unity() {
+        // Verifies the end-to-end mix stays within unity via the ratio-sum-to-1.0 invariant.
         // Two loud windows summed naively would clip; soft-scale keeps |x|<=1.
         let mic: Box<dyn AudioCapture> = Box::new(ScriptCapture {
             frames: vec![win(0.0, 0.9, AudioSource::Microphone)],
