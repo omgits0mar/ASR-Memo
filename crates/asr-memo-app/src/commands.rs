@@ -448,15 +448,14 @@ pub fn reveal_recording(path: String) -> serde_json::Value {
     {
         let p = std::path::Path::new(&path);
         if p.exists() {
-            let _ = std::process::Command::new("open").arg("-R").arg(p).spawn();
+            let _ = std::process::Command::new("open").arg("-R").arg(p).status();
             return serde_json::json!({"revealed": true});
         }
     }
-    #[allow(unreachable_code)]
     err(
         "capture.reveal",
-        "file not found",
-        "Record something first, then reveal it.",
+        "recording not found or reveal unsupported on this OS",
+        &format!("Record first, then reveal. Looked for: {path}"),
     )
 }
 
