@@ -17,6 +17,9 @@ pub fn run() {
             commands::transcribe_file,
             commands::pick_audio_file,
             commands::pick_export_path,
+            commands::start_capture,
+            commands::stop_capture,
+            commands::reveal_recording,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ASR-Memo");
