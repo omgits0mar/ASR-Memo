@@ -54,6 +54,18 @@
         <button id="startBtn" class="btn btn--primary">Start live</button>
         <button id="importBtn" class="btn btn--ghost">Import audio…</button>
       </div>
+      <hr class="rule" />
+      <h3>Capture &amp; record (audio only)</h3>
+      <p class="lede">Records mic + system audio to a WAV — the live transcript returns with ASR (Phase 3).</p>
+      <div class="meters">
+        <div class="meter"><span>mic</span><div class="meter__bar"><div id="micLevel" class="meter__fill"></div></div></div>
+        <div class="meter"><span>system</span><div class="meter__bar"><div id="sysLevel" class="meter__fill meter__fill--sys"></div></div></div>
+      </div>
+      <div class="actions">
+        <button id="recordBtn" class="btn btn--ghost">Record</button>
+        <span id="recordStatus" class="chip"></span>
+      </div>
+      <div id="audioBanner" class="banner banner--warn hidden"></div>
     </section>
 
     <!-- ───────────── Session (live/file in progress) ───────────── -->

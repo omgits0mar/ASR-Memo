@@ -142,3 +142,14 @@ details.permissions ul { margin: 8px 0 0; padding-left: 18px; }
 .toast__hint { font-style: normal; }
 
 .footnote { text-align: center; color: var(--ink-soft); font-size: 11px; padding: 14px; }
+
+/* ---- capture / record (Phase 2a) ---- */
+.rule { border: 0; border-top: 1px solid var(--hair); margin: 1rem 0; }
+.meters { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0; }
+.meter { display: flex; align-items: center; gap: .5rem; }
+.meter > span { width: 4rem; color: var(--ink-soft); font-size: .8rem; }
+.meter__bar { flex: 1; height: 8px; background: var(--hair); border-radius: 4px; overflow: hidden; }
+.meter__fill { height: 100%; width: 0%; background: var(--spk-1, #1A7F64); transition: width .08s linear; }
+.meter__fill--sys { background: var(--spk-2, #2D7FF9); }
+.banner { padding: .6rem .8rem; border-radius: 8px; font-size: .9rem; margin-top: .5rem; }
+.banner--warn { background: color-mix(in srgb, var(--danger) 16%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); color: color-mix(in srgb, var(--ink) 55%, var(--danger)); }

@@ -19,6 +19,12 @@
       export_transcript: (path, format = null) =>
         invoke("export_transcript", { path, format }),
       get_transcript: () => invoke("get_transcript"),
+      // Phase 2a capture/record commands — arg names match the snake_case
+      // #[tauri::command] params in commands.rs (sources, meeting_name, path).
+      start_capture: (sources, meeting_name = null) =>
+        invoke("start_capture", { sources, meeting_name }),
+      stop_capture: () => invoke("stop_capture"),
+      reveal_recording: (path) => invoke("reveal_recording", { path }),
     },
   };
 
