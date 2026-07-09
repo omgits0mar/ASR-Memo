@@ -212,6 +212,8 @@ async function stopCapture() {
   const res = await api().stop_capture();
   $("recordStatus").textContent = "";
   $("recordBtn").textContent = "Record";
+  setMeter("micLevel", 0);
+  setMeter("sysLevel", 0);
   if (res?.path) await api().reveal_recording(res.path);
   else if (res?.error) showError(res.error);
 }

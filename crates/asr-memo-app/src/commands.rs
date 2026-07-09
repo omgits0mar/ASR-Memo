@@ -318,7 +318,20 @@ pub fn start_capture<R: Runtime>(
             "Could not create the recordings directory.",
         );
     }
-    let name = meeting_name.unwrap_or_else(|| "meeting".into());
+    // Sanitize the meeting name: restrict to a safe filename charset so a
+    // user-supplied value can't escape the recordings dir (no `/`, `\`, `..`).
+    let name = {
+        let cleaned: String = meeting_name
+            .unwrap_or_default()
+            .chars()
+            .filter(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | ' '))
+            .collect();
+        if cleaned.trim().is_empty() {
+            "meeting".to_string()
+        } else {
+            cleaned
+        }
+    };
     let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let path = dir.join(format!("{name}-{stamp}.wav"));
 

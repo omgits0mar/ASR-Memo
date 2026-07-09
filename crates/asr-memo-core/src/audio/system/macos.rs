@@ -2,7 +2,8 @@
 //! wrapped in a tap-only private aggregate device (never tap + output device —
 //! that caused meetily's echo). Reads the device sample rate each cycle so a
 //! Bluetooth profile switch reconfigures the resampler (the rate-tracking fix).
-//! Faithful port of meetily's audio/capture/core_audio.rs (MIT).
+//! Faithful port of meetily's audio/capture/core_audio.rs (MIT — notice
+//! retained in /LICENSE-THIRDPARTY.md; Copyright (c) 2024 Zackriya Solutions).
 
 #![cfg(target_os = "macos")]
 
