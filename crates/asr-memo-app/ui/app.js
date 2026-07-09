@@ -214,6 +214,7 @@ async function stopCapture() {
   $("recordBtn").textContent = "Record";
   setMeter("micLevel", 0);
   setMeter("sysLevel", 0);
+  $("audioBanner")?.classList.add("hidden"); // clear any system_silent / rate_changed warning
   if (res?.path) await api().reveal_recording(res.path);
   else if (res?.error) showError(res.error);
 }

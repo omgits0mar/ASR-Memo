@@ -100,23 +100,38 @@ impl AudioCapture for MixedCapture {
         let stop = self.stop.clone();
         let (mic_tx, mic_rx) = mpsc::channel::<AudioFrame>();
         let (sys_tx, sys_rx) = mpsc::channel::<AudioFrame>();
+        let mic_active = self.mic.is_some();
         let system_active = self.system.is_some();
 
+        // Hold the mic capture until the system capture also starts: if
+        // `sys.start()` fails we must `mic.stop()` the stream we just brought
+        // up, or it leaks a live cpal input + parked worker on a failed start.
+        // (Phase-2a happy-path teardown of sub-captures is still a follow-up —
+        // on success both are `forget`-ed so their threads outlive `stop`.)
+        let mut started_mic: Option<Box<dyn AudioCapture>> = None;
         if let Some(mut mic) = self.mic.take() {
             let tx = mic_tx.clone();
             mic.start(Box::new(move |f| {
                 let _ = tx.send(f);
             }))?;
-            // Phase-2a: sub-capture threads outlive `stop` (full teardown is a
-            // follow-up; AudioCapture::stop can't return the capture to reclaim).
-            std::mem::forget(mic);
+            started_mic = Some(mic);
         }
         if let Some(mut sys) = self.system.take() {
             let tx = sys_tx.clone();
-            sys.start(Box::new(move |f| {
+            if let Err(e) = sys.start(Box::new(move |f| {
                 let _ = tx.send(f);
-            }))?;
+            })) {
+                if let Some(mut m) = started_mic {
+                    m.stop();
+                }
+                return Err(e);
+            }
+            // Phase-2a: sub-capture threads outlive `stop` (full teardown is a
+            // follow-up; AudioCapture::stop can't return the capture to reclaim).
             std::mem::forget(sys);
+        }
+        if let Some(mic) = started_mic {
+            std::mem::forget(mic);
         }
 
         // Move the health callback into the mixer thread. `start` consumes it.
@@ -141,14 +156,28 @@ impl AudioCapture for MixedCapture {
                 while let Ok(f) = sys_rx.try_recv() {
                     sys_buf.extend(f.pcm);
                 }
-                if mic_buf.len() >= WINDOW_SAMPLES {
-                    let mic_w: Vec<f32> = mic_buf.drain(..WINDOW_SAMPLES).collect();
-                    let sys_w: Vec<f32> = if sys_buf.len() >= WINDOW_SAMPLES {
+                // Window off the primary active source so a system-only recording
+                // (mic deselected) still produces output; the inactive source is
+                // treated as a full silent window. Pacing solely off the mic buffer
+                // (the old condition) meant mic=None captured nothing at all.
+                let primary_len = if mic_active {
+                    mic_buf.len()
+                } else {
+                    sys_buf.len()
+                };
+                if primary_len >= WINDOW_SAMPLES {
+                    let mic_w: Vec<f32> = if mic_active {
+                        mic_buf.drain(..WINDOW_SAMPLES).collect()
+                    } else {
+                        vec![0.0; WINDOW_SAMPLES]
+                    };
+                    let sys_w: Vec<f32> = if system_active && sys_buf.len() >= WINDOW_SAMPLES {
                         sys_buf.drain(..WINDOW_SAMPLES).collect()
                     } else {
-                        // System lagging this window: pad with zeros, leave real
-                        // samples buffered for the next aligned window.
-                        vec![0.0; WINDOW_SAMPLES.min(sys_buf.len())]
+                        // System inactive or lagging this window: pad a full
+                        // silent window, leaving any real samples buffered for
+                        // the next aligned window.
+                        vec![0.0; WINDOW_SAMPLES]
                     };
                     let snap = health.update(&mic_w, &sys_w, system_active);
                     on_health(snap);
@@ -332,5 +361,34 @@ mod tests {
         assert!(healths
             .iter()
             .any(|h| h.flags.contains(&HealthFlag::SystemSilent)));
+    }
+
+    #[test]
+    fn system_only_recording_produces_output() {
+        // mic deselected → the mixer must still window off the system buffer.
+        // Regression guard: the old window gate keyed only on `mic_buf.len()`,
+        // so with mic=None the loop slept forever and a system-only recording
+        // captured nothing (empty header-only WAV, no health/meter events).
+        let sys: Box<dyn AudioCapture> = Box::new(ScriptCapture {
+            frames: vec![
+                win(0.0, 0.4, AudioSource::System),
+                win(0.05, 0.4, AudioSource::System),
+            ],
+        });
+        let (tx, rx) = mpsc::channel::<AudioFrame>();
+        let mut mix = MixedCapture::new(None, Some(sys), Box::new(|_| {}));
+        mix.start(Box::new(move |f| tx.send(f).unwrap())).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        mix.stop();
+        let frames: Vec<AudioFrame> = rx.try_iter().collect();
+        assert!(
+            frames.len() >= 2,
+            "system-only recording must produce frames, got {}",
+            frames.len()
+        );
+        for f in &frames {
+            assert_eq!(f.pcm.len(), WINDOW_SAMPLES);
+            assert_eq!(f.source, AudioSource::System);
+        }
     }
 }

@@ -293,7 +293,14 @@ pub fn start_capture<R: Runtime>(
 ) -> serde_json::Value {
     use asr_memo_core::audio::mic::CpalMicrophoneCapture;
 
-    if state.capture.lock().unwrap().is_some() {
+    // Hold the capture lock across check + build + assign. Building the mixer
+    // and starting cpal/cidre can take ~1 s; without holding the guard, two
+    // concurrent start_capture calls would both pass this check and the second
+    // would orphan the first session (its mixer/streams never stopped). This is
+    // a command handler, not a hot path, so holding the lock through setup is
+    // fine.
+    let mut capture_guard = state.capture.lock().unwrap();
+    if capture_guard.is_some() {
         return err(
             "capture.busy",
             "a capture is already running",
@@ -405,11 +412,12 @@ pub fn start_capture<R: Runtime>(
     }
 
     let path_str = path.to_string_lossy().into_owned();
-    *state.capture.lock().unwrap() = Some(CaptureSession {
+    *capture_guard = Some(CaptureSession {
         mixer,
         writer,
         path: path_str.clone(),
     });
+    drop(capture_guard);
     let _ = app.emit(
         "backend-event",
         serde_json::json!({"type": "status", "status": "recording"}),
@@ -418,28 +426,40 @@ pub fn start_capture<R: Runtime>(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn stop_capture(state: State<'_, AppState>) -> serde_json::Value {
+pub fn stop_capture<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> serde_json::Value {
     let session = state.capture.lock().unwrap().take();
-    match session {
-        Some(mut s) => {
-            // Join the mixer thread FIRST — this drops its Arc<Mutex<...>>
-            // clone, so once stop() returns we are the sole owner of the writer
-            // and can `take()` + `close()` it by value.
-            s.mixer.stop();
-            let writer_opt = s.writer.lock().unwrap().take();
-            if let Some(w) = writer_opt {
-                if let Err(e) = w.close() {
-                    return err(
-                        "capture.close",
-                        &e.to_string(),
-                        "Recording may be incomplete — check the file.",
-                    );
-                }
-            }
-            serde_json::json!({"path": s.path})
-        }
-        None => serde_json::json!({ "path": serde_json::Value::Null }),
+    let Some(mut s) = session else {
+        // Nothing was recording, but still clear the badge in case start_capture
+        // had set it to "recording".
+        let _ = app.emit(
+            "backend-event",
+            event_payload(&SessionEvent::Status("stopped".into())),
+        );
+        return serde_json::json!({ "path": serde_json::Value::Null });
+    };
+    // Join the mixer thread FIRST — this drops its Arc<Mutex<...>> clone, so
+    // once stop() returns we are the sole owner of the writer and can `take()`
+    // + `close()` it by value.
+    s.mixer.stop();
+    let writer_opt = s.writer.lock().unwrap().take();
+    let close_err = writer_opt.map(|w| w.close()).and_then(|r| r.err());
+    // Always signal stopped so the global status badge — set to "recording" by
+    // start_capture — clears, even when the WAV close failed.
+    let _ = app.emit(
+        "backend-event",
+        event_payload(&SessionEvent::Status("stopped".into())),
+    );
+    if let Some(e) = close_err {
+        return err(
+            "capture.close",
+            &e.to_string(),
+            "Recording may be incomplete — check the file.",
+        );
     }
+    serde_json::json!({"path": s.path})
 }
 
 #[tauri::command(rename_all = "snake_case")]

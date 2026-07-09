@@ -11,7 +11,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Sample, SampleFormat};
+use cpal::{FromSample, Sample, SampleFormat};
 
 use crate::audio::resample::PersistentResampler;
 use crate::traits::{AudioCapture, AudioFrame, CoreError};
@@ -175,18 +175,24 @@ fn build_and_play(frames_tx: FrameSink) -> Result<cpal::Stream, CoreError> {
 /// Downmix interleaved PCM to mono f32, resample device-rate → 16 kHz, and
 /// forward one `AudioFrame` per resampled chunk. `emitted` advances the session
 /// clock so each frame's timestamps are contiguous across callbacks.
-fn on_pcm<T: Sample + Into<f32>>(
+fn on_pcm<T: Sample>(
     data: &[T],
     channels: usize,
     resampler: &Arc<Mutex<PersistentResampler>>,
     frames_tx: &FrameSink,
     emitted: &mut usize,
-) {
+) where
+    f32: FromSample<T>,
+{
     let ch = channels.max(1);
-    // Downmix to mono f32 (average interleaved samples across channels).
+    // Downmix to mono f32 (average interleaved samples across channels). Use
+    // cpal's normalizing `to_sample::<f32>()` (i16 → [-1,1]), NOT `Into<f32>`:
+    // for i16 that resolves to std's value-preserving raw cast (~±32768),
+    // which would feed un-normalized samples into the resampler/mixer and
+    // clip + distort the recording on any I16 device (some Linux/Windows cfgs).
     let mono: Vec<f32> = data
         .chunks_exact(ch)
-        .map(|frame| frame.iter().map(|s| (*s).into()).sum::<f32>() / ch as f32)
+        .map(|frame| frame.iter().map(|s| (*s).to_sample::<f32>()).sum::<f32>() / ch as f32)
         .collect();
     let resampled = resampler.lock().unwrap().process(&mono);
     if resampled.is_empty() {
