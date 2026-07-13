@@ -112,6 +112,27 @@ window.onBackendEvent = function (evt) {
         $("prepareProgress").classList.add("hidden");
         if (evt.readiness?.ready) showReady(); else renderReadiness(evt.readiness);
         break;
+      case "audio_health": {
+        setMeter("micLevel", evt.mic?.rms || 0);
+        setMeter("sysLevel", evt.system?.rms || 0);
+        const banner = $("audioBanner");
+        const flags = evt.flags || [];
+        if (flags.includes("system_silent")) {
+          banner.textContent = "⚠️ System audio is silent — check the Audio capture permission (macOS 14.4+).";
+          banner.classList.remove("hidden");
+        } else if (flags.includes("rate_changed")) {
+          banner.textContent = "Audio device changed (e.g. Bluetooth) — capture reconfigured; check levels.";
+          banner.classList.remove("hidden");
+        } else {
+          banner.classList.add("hidden");
+        }
+        break;
+      }
+      // capture_frame ticks arrive per mixed frame during record mode; currently
+      // a no-op hook (meters are driven by audio_health), reserved for a
+      // future live waveform/counter surface.
+      case "capture_frame":
+        break;
       case "error":
         showError(evt.error);
         if (evt.error?.code === "not_ready") showSetup();
@@ -173,6 +194,38 @@ function beginSession(mode) {
   showScreen("session");
 }
 
+/* ---------- capture / record (Phase 2a) ---------- */
+// Record mode runs the audio engine end-to-end with no transcript (ASR lands in
+// Phase 3). start_capture wires mic + system into the mixer and emits
+// audio_health; stop_capture closes the WAV and returns its path. The record
+// button toggles Record ↔ Stop & reveal based on its current label.
+async function startCapture() {
+  const sources = [];
+  if ($("srcMic")?.checked) sources.push("microphone");
+  if ($("srcSys")?.checked) sources.push("system");
+  const res = await api().start_capture(sources, null);
+  if (res?.error) { showError(res.error); return; }
+  $("recordStatus").textContent = "recording…";
+  $("recordBtn").textContent = "Stop & reveal";
+}
+async function stopCapture() {
+  const res = await api().stop_capture();
+  $("recordStatus").textContent = "";
+  $("recordBtn").textContent = "Record";
+  setMeter("micLevel", 0);
+  setMeter("sysLevel", 0);
+  $("audioBanner")?.classList.add("hidden"); // clear any system_silent / rate_changed warning
+  if (res?.path) await api().reveal_recording(res.path);
+  else if (res?.error) showError(res.error);
+}
+
+// Log-scaled level meter: 0 RMS → 0%, small RMS fills quickly, loud clips near 100%.
+// Width = log10(1 + rms*9) * 100, clamped to [0,100] (per task 9 brief).
+function setMeter(elId, rms) {
+  const pct = Math.min(100, Math.max(0, Math.log10(1 + rms * 9) * 100));
+  const el = $(elId); if (el) el.style.width = pct.toFixed(1) + "%";
+}
+
 /* ---------- stop / review ---------- */
 async function stopSession() { setStatus("stopping"); await api().stop_session(); }
 async function showReview() {
@@ -212,6 +265,8 @@ function bind() {
   $("prepareBtn").onclick = async () => { $("prepareProgress").classList.remove("hidden"); $("prepareFill").style.width = "0%"; await api().prepare(); };
   $("startBtn").onclick = startLive;
   $("importBtn").onclick = importFile;
+  const rb = $("recordBtn");
+  if (rb) rb.onclick = () => (rb.textContent === "Record" ? startCapture() : stopCapture());
   $("stopBtn").onclick = stopSession;
   $("exportMd").onclick = () => exportAs("markdown");
   $("exportJson").onclick = () => exportAs("json");

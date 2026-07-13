@@ -2,13 +2,19 @@
 //! shapes, and events, so app/web/app.js runs unchanged. Phase 1 wires the
 //! deterministic fakes; Phases 2–4 swap in real backends behind these commands.
 
+use std::sync::{Arc, Mutex};
+
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
+use asr_memo_core::audio::health::{HealthFlag, HealthSnapshot};
+use asr_memo_core::audio::mixer::MixedCapture;
+use asr_memo_core::audio::record::WavWriter;
 use asr_memo_core::fakes::{demo_script, FakeCapture, FakeDiarizer, FakeTranscriber};
 use asr_memo_core::session::{Session, SessionEvent};
+use asr_memo_core::traits::AudioCapture;
 use asr_memo_core::types::{ErrorInfoDto, ReadinessDto, SegmentDto, SpeakerDto};
 
-use crate::state::AppState;
+use crate::state::{AppState, CaptureSession};
 
 // ---------- pure logic (unit-tested) ----------
 
@@ -69,6 +75,26 @@ fn speakers_view(segments: &[SegmentDto]) -> Vec<SpeakerDto> {
             }
         })
         .collect()
+}
+
+/// `audio_health` event payload — locked shape consumed by app.js:
+/// `{type:"audio_health", mic:{rms,peak}, system:{rms,peak}, flags:[...]}`.
+/// Pure (no `AppState`); unit-tested for shape stability.
+pub fn audio_health_payload(snap: &HealthSnapshot) -> serde_json::Value {
+    let flags: Vec<&str> = snap
+        .flags
+        .iter()
+        .map(|f| match f {
+            HealthFlag::SystemSilent => "system_silent",
+            HealthFlag::RateChanged => "rate_changed",
+        })
+        .collect();
+    serde_json::json!({
+        "type": "audio_health",
+        "mic": { "rms": snap.mic.rms, "peak": snap.mic.peak },
+        "system": { "rms": snap.system.rms, "peak": snap.system.peak },
+        "flags": flags,
+    })
 }
 
 fn err(code: &str, message: &str, hint: &str) -> serde_json::Value {
@@ -250,6 +276,230 @@ pub async fn pick_export_path<R: Runtime>(app: AppHandle<R>, format: String) -> 
     serde_json::json!({"path": path})
 }
 
+// ---------- capture/record mode (Phase 2a) ----------
+//
+// A distinct capture/record mode that runs the audio engine end-to-end with no
+// transcript (ASR lands in Phase 3). start_capture wires mic + system sources
+// into the mixer, ships mixed frames (upsampled 16k→48k) to a WAV writer, and
+// emits `audio_health` events; stop_capture joins the mixer, closes the writer
+// (by value), and returns the file path.
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn start_capture<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    sources: Vec<String>,
+    meeting_name: Option<String>,
+) -> serde_json::Value {
+    use asr_memo_core::audio::mic::CpalMicrophoneCapture;
+
+    // Hold the capture lock across check + build + assign. Building the mixer
+    // and starting cpal/cidre can take ~1 s; without holding the guard, two
+    // concurrent start_capture calls would both pass this check and the second
+    // would orphan the first session (its mixer/streams never stopped). This is
+    // a command handler, not a hot path, so holding the lock through setup is
+    // fine.
+    let mut capture_guard = state.capture.lock().unwrap();
+    if capture_guard.is_some() {
+        return err(
+            "capture.busy",
+            "a capture is already running",
+            "Stop the current recording first.",
+        );
+    }
+    let want_mic = sources.iter().any(|s| s == "microphone");
+    let want_sys = sources.iter().any(|s| s == "system");
+    if !want_mic && !want_sys {
+        return err(
+            "capture.sources",
+            "no sources selected",
+            "Choose microphone and/or system audio.",
+        );
+    }
+
+    let dir = recording_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return err(
+            "capture.dir",
+            &e.to_string(),
+            "Could not create the recordings directory.",
+        );
+    }
+    // Sanitize the meeting name: restrict to a safe filename charset so a
+    // user-supplied value can't escape the recordings dir (no `/`, `\`, `..`).
+    let name = {
+        let cleaned: String = meeting_name
+            .unwrap_or_default()
+            .chars()
+            .filter(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | ' '))
+            .collect();
+        if cleaned.trim().is_empty() {
+            "meeting".to_string()
+        } else {
+            cleaned
+        }
+    };
+    let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let path = dir.join(format!("{name}-{stamp}.wav"));
+
+    let writer = match WavWriter::create(&path, 48000) {
+        Ok(w) => w,
+        Err(e) => {
+            return err(
+                "capture.file",
+                &e.to_string(),
+                "Could not open the recording file.",
+            )
+        }
+    };
+    // Shared between the mixer thread (writes frames) and stop_capture (closes
+    // by value). `Option<>` lets stop_capture `take()` it once the mixer thread
+    // has been joined and dropped its Arc clone.
+    let writer: Arc<Mutex<Option<WavWriter>>> = Arc::new(Mutex::new(Some(writer)));
+
+    // Health callback runs on the mixer thread; clone the AppHandle and emit
+    // `audio_health` per snapshot.
+    let app_for_health = app.clone();
+    let on_health = Box::new(move |snap: HealthSnapshot| {
+        let _ = app_for_health.emit("backend-event", audio_health_payload(&snap));
+    });
+
+    let mic: Option<Box<dyn AudioCapture>> = if want_mic {
+        Some(Box::new(CpalMicrophoneCapture::new()))
+    } else {
+        None
+    };
+    let sys: Option<Box<dyn AudioCapture>> = if want_sys {
+        #[cfg(target_os = "macos")]
+        {
+            Some(Box::new(
+                asr_memo_core::audio::system::macos::CoreAudioTapCapture::new(),
+            ))
+        }
+        // Phase 2b: Windows/Linux system capture not implemented.
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Frame callback runs on the mixer thread: upsample 16k→48k for the
+    // recording (zero-order hold ×3) and write, then emit a capture_frame tick.
+    let app_for_frames = app.clone();
+    let writer_for_cb = writer.clone();
+    let mut mixer = MixedCapture::new(mic, sys, on_health);
+    if let Err(e) = mixer.start(Box::new(move |frame| {
+        if let Some(w) = writer_for_cb.lock().unwrap().as_mut() {
+            let up = upsample_16_to_48(&frame.pcm);
+            let _ = w.write_samples(&up);
+        }
+        let _ = app_for_frames.emit(
+            "backend-event",
+            serde_json::json!({
+                "type": "capture_frame",
+                "samples": frame.pcm.len(),
+                "t": frame.t_end,
+            }),
+        );
+    })) {
+        return err(
+            "capture.start",
+            &e.to_string(),
+            "Could not start audio capture.",
+        );
+    }
+
+    let path_str = path.to_string_lossy().into_owned();
+    *capture_guard = Some(CaptureSession {
+        mixer,
+        writer,
+        path: path_str.clone(),
+    });
+    drop(capture_guard);
+    let _ = app.emit(
+        "backend-event",
+        serde_json::json!({"type": "status", "status": "recording"}),
+    );
+    serde_json::json!({"path": path_str})
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn stop_capture<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> serde_json::Value {
+    let session = state.capture.lock().unwrap().take();
+    let Some(mut s) = session else {
+        // Nothing was recording, but still clear the badge in case start_capture
+        // had set it to "recording".
+        let _ = app.emit(
+            "backend-event",
+            event_payload(&SessionEvent::Status("stopped".into())),
+        );
+        return serde_json::json!({ "path": serde_json::Value::Null });
+    };
+    // Join the mixer thread FIRST — this drops its Arc<Mutex<...>> clone, so
+    // once stop() returns we are the sole owner of the writer and can `take()`
+    // + `close()` it by value.
+    s.mixer.stop();
+    let writer_opt = s.writer.lock().unwrap().take();
+    let close_err = writer_opt.map(|w| w.close()).and_then(|r| r.err());
+    // Always signal stopped so the global status badge — set to "recording" by
+    // start_capture — clears, even when the WAV close failed.
+    let _ = app.emit(
+        "backend-event",
+        event_payload(&SessionEvent::Status("stopped".into())),
+    );
+    if let Some(e) = close_err {
+        return err(
+            "capture.close",
+            &e.to_string(),
+            "Recording may be incomplete — check the file.",
+        );
+    }
+    serde_json::json!({"path": s.path})
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn reveal_recording(path: String) -> serde_json::Value {
+    #[cfg(target_os = "macos")]
+    {
+        let p = std::path::Path::new(&path);
+        if p.exists() {
+            let _ = std::process::Command::new("open").arg("-R").arg(p).status();
+            return serde_json::json!({"revealed": true});
+        }
+    }
+    err(
+        "capture.reveal",
+        "recording not found or reveal unsupported on this OS",
+        &format!("Record first, then reveal. Looked for: {path}"),
+    )
+}
+
+/// Zero-order hold ×3: repeats each 16 kHz sample three times for 48 kHz. Good
+/// enough for a speech recording (no anti-imaging filter, but the file is for
+/// human review / re-decode, not model input).
+fn upsample_16_to_48(input: &[f32]) -> Vec<f32> {
+    let mut out = Vec::with_capacity(input.len() * 3);
+    for &s in input {
+        out.extend_from_slice(&[s, s, s]);
+    }
+    out
+}
+
+/// `~/Library/Application Support/ASR-Memo/recordings` on macOS (via the `dirs`
+/// crate, which handles the platform data dir correctly). Falls back to a local
+/// `recordings/` directory if `dirs` can't resolve a data dir.
+fn recording_dir() -> std::path::PathBuf {
+    if let Some(proj) = dirs::data_dir() {
+        return proj.join("ASR-Memo").join("recordings");
+    }
+    std::path::PathBuf::from("recordings")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,6 +510,26 @@ mod tests {
         assert!(r.ready);
         assert_eq!(r.compute_backend, "fake");
         assert!(r.missing.is_empty());
+    }
+
+    #[test]
+    fn audio_health_payload_shape() {
+        let snap = HealthSnapshot {
+            mic: asr_memo_core::audio::health::SourceHealth {
+                rms: 0.1,
+                peak: 0.5,
+            },
+            system: asr_memo_core::audio::health::SourceHealth {
+                rms: 0.0,
+                peak: 0.0,
+            },
+            flags: vec![HealthFlag::SystemSilent],
+        };
+        let v = audio_health_payload(&snap);
+        assert_eq!(v["type"], "audio_health");
+        assert_eq!(v["mic"]["peak"], 0.5);
+        assert_eq!(v["system"]["rms"], 0.0);
+        assert_eq!(v["flags"][0], "system_silent");
     }
 
     #[test]
