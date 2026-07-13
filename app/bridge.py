@@ -192,7 +192,8 @@ class Api:
             report = self._readiness()
         except Exception as e:  # defensive: the UI must always get an answer
             return {
-                "ready": False, "compute_backend": "cpu", "os_supports_process_tap": False,
+                "ready": False, "compute_backend": "cpu",
+                "os_supports_system_audio": False, "os_supports_process_tap": False,
                 "mic_permission": False, "system_audio_permission": False,
                 "models": [], "missing": [f"readiness check failed: {e}"],
             }
@@ -364,7 +365,7 @@ class Api:
                 code="export.empty", message="no transcript to export",
                 recoverable=True, hint="Produce a transcript first, then export."))}
         try:
-            fmt = format or _ext_format(path)
+            _ = format or _ext_format(path)
         except ValueError as e:
             return {"error": error_dto(ErrorInfo(code="export.format", message=str(e), recoverable=True, hint="Choose Markdown (.md) or JSON (.json)."))}
         try:

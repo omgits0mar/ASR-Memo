@@ -13,7 +13,6 @@ script — see ``tests/integration/test_audiotap_helper.py``).
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 import threading
@@ -58,6 +57,7 @@ class CoreAudioTapCapture:
         process: Optional[str] = None,
         block_seconds: float = 0.1,
     ) -> None:
+        self._explicit_helper = helper_path is not None
         self._helper = helper_path or (_default_helper_path() and str(_default_helper_path()))
         self._process = process  # None → system-wide tap
         self._block = int(block_seconds * SAMPLE_RATE)
@@ -70,13 +70,13 @@ class CoreAudioTapCapture:
         self._mixer = AudioMixer()
 
     def permission_status(self) -> bool:
-        return os_supports_process_tap()
+        return self._can_replay_helper_off_platform() or os_supports_process_tap()
 
     def state(self) -> CaptureState:
         return self._state
 
     def start(self, on_frame: Callable[[AudioFrame], None]) -> None:
-        if not os_supports_process_tap():
+        if not self._can_replay_helper_off_platform() and not os_supports_process_tap():
             raise CapturePermissionError(
                 "Core Audio Process Taps require macOS 14.4+", source=self.kind
             )
@@ -140,11 +140,22 @@ class CoreAudioTapCapture:
         except Exception:
             _log.exception("CoreAudioTap stderr drain error")
 
+    def _can_replay_helper_off_platform(self) -> bool:
+        """Allow local fake helpers to exercise the pipe reader on non-macOS CI."""
+        if not self._explicit_helper or not self._helper:
+            return False
+        try:
+            path = Path(self._helper).resolve()
+        except OSError:
+            return False
+        system_roots = (Path("/bin"), Path("/sbin"), Path("/usr/bin"), Path("/usr/sbin"))
+        return not any(path == root or root in path.parents for root in system_roots)
+
     def _read_loop(self, on_frame: Callable[[AudioFrame], None]) -> None:
         assert self._proc is not None and self._proc.stdout is not None
         bytes_per_block = self._block * 4  # float32
         try:
-            while self._proc.poll() is None:
+            while True:
                 raw = self._proc.stdout.read(bytes_per_block)
                 if not raw:
                     break

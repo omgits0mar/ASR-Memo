@@ -18,7 +18,14 @@ from pathlib import Path
 from typing import Callable, List, Optional, Sequence
 
 from .._logging import ModelError, get_logger
-from ..types import ModelAsset, ModelKind, ModelState, PrepareProgress
+from ..types import (
+    ComputeBackend,
+    ModelAsset,
+    ModelFramework,
+    ModelKind,
+    ModelState,
+    PrepareProgress,
+)
 
 _log = get_logger("models.registry")
 
@@ -47,12 +54,19 @@ def cache_dir_for(asset: ModelAsset, cache_root: Path) -> Path:
     return Path(cache_root) / asset.name
 
 
-def model_registry() -> List[ModelAsset]:
-    """The canonical list of required models for the pipeline.
+def model_registry(backend: Optional[ComputeBackend] = None) -> List[ModelAsset]:
+    """The canonical list of required models for the selected pipeline.
 
     Repos/revisions are configured here; adjust to the exact published artifacts
     once the FP16 ONNX / CoreML builds are pinned (research Decisions 1–2).
     """
+    if backend in (ComputeBackend.CUDA, ComputeBackend.TORCH_CPU):
+        return _nemo_registry()
+    return _apple_registry()
+
+
+def _apple_registry() -> List[ModelAsset]:
+    """ONNX/CoreML assets for the existing macOS path and ONNX CPU fallback."""
     # FP16 ONNX export of nvidia/nemotron-3.5-asr-streaming-0.6b (.nemo ships no
     # ONNX; NeMo/torch target CUDA, so on Apple Silicon we run the ONNX/CoreML EP
     # path against this export). Cache-aware streaming RNNT is a 3-graph export:
@@ -61,6 +75,7 @@ def model_registry() -> List[ModelAsset]:
     asr = ModelAsset(
         name="nemotron-3.5-asr-streaming",
         kind=ModelKind.ASR,
+        framework=ModelFramework.ONNX,
         repo_id="soniqo/Nemotron-3.5-ASR-Streaming-Multilingual-0.6B-ONNX-FP16",
         revision="76daabfd0aaf5ec6ef1e6640eae3b364af6c9970",
         expected_files=(
@@ -83,12 +98,37 @@ def model_registry() -> List[ModelAsset]:
     diarizer = ModelAsset(
         name="diar-streaming-sortformer-4spk-v2.1",
         kind=ModelKind.DIARIZER,
+        framework=ModelFramework.COREML,
         repo_id="FluidInference/diar-streaming-sortformer-coreml",
         revision="89f9a0d635c2f01b0202651432eb55d55939a07b",
         expected_files=(
             "Sortformer.mlpackage",
             "config.json",
         ),
+    )
+    return [asr, diarizer]
+
+
+def _nemo_registry() -> List[ModelAsset]:
+    """Native NeMo/PyTorch assets for CUDA and torch-CPU hosts."""
+    asr = ModelAsset(
+        name="nemotron-3.5-asr-streaming-nemo",
+        kind=ModelKind.ASR,
+        framework=ModelFramework.NEMO,
+        repo_id="nvidia/nemotron-3.5-asr-streaming-0.6b",
+        # TODO: pin to the full HF commit after the streaming timestamp spike.
+        revision="main",
+        expected_files=("nemotron-3.5-asr-streaming-0.6b.nemo",),
+        supported_languages=NEMOTRON_LANGUAGES,
+    )
+    diarizer = ModelAsset(
+        name="diar-streaming-sortformer-4spk-v2.1-nemo",
+        kind=ModelKind.DIARIZER,
+        framework=ModelFramework.NEMO,
+        repo_id="nvidia/diar_streaming_sortformer_4spk-v2.1",
+        # TODO: pin to the full HF commit after the NeMo streaming API spike.
+        revision="main",
+        expected_files=("diar_streaming_sortformer_4spk-v2.1.nemo",),
     )
     return [asr, diarizer]
 
@@ -188,8 +228,13 @@ def prepare(
         target = cache_dir_for(current, root)
         target.mkdir(parents=True, exist_ok=True)
         _emit(current.name, 0, 1, ModelState.DOWNLOADING)
+        current_name = current.name
         try:
-            downloader(current, target, lambda d, t: _emit(current.name, d, t or 1, ModelState.DOWNLOADING))
+            downloader(
+                current,
+                target,
+                lambda d, t, name=current_name: _emit(name, d, t or 1, ModelState.DOWNLOADING),
+            )
         except Exception as e:  # interrupted / network loss
             _log.error("download interrupted for %s: %s", current.name, e)
             result.append(replace(current, state=ModelState.ERROR))

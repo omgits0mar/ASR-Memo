@@ -27,6 +27,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Native NeMo/PyTorch path for Linux/Windows CUDA and torch-CPU hosts.
+nemo = [
+    "Cython",
+    "packaging",
+    "torch",
+    "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git@main",
+]
 # Reference / validation paths only (NeMo + PyTorch-MPS). Not required for the
 # production ONNX Runtime + CoreML pipeline.
 reference = [

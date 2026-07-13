@@ -11,11 +11,13 @@ from meeting_asr.backends.device import (
 from meeting_asr.types import ComputeBackend
 
 
-def probe(*, silicon, ort, coreml, prefer_ane=False):
+def probe(*, silicon, ort, coreml, torch=False, cuda=False, prefer_ane=False):
     return DeviceProbe(
         is_apple_silicon=lambda: silicon,
         has_onnxruntime=lambda: ort,
         has_coreml_ep=lambda: coreml,
+        has_torch=lambda: torch,
+        has_cuda=lambda: cuda,
         prefer_ane=prefer_ane,
     )
 
@@ -36,6 +38,14 @@ class TestResolveBackend:
     def test_non_apple_silicon_forces_cpu_even_if_coreml_listed(self):
         b = resolve_backend(probe(silicon=False, ort=True, coreml=True))
         assert b is ComputeBackend.CPU
+
+    def test_cuda_wins_after_apple_coreml_path(self):
+        b = resolve_backend(probe(silicon=False, ort=True, coreml=False, torch=True, cuda=True))
+        assert b is ComputeBackend.CUDA
+
+    def test_torch_cpu_wins_before_onnx_cpu(self):
+        b = resolve_backend(probe(silicon=False, ort=True, coreml=False, torch=True, cuda=False))
+        assert b is ComputeBackend.TORCH_CPU
 
     def test_nothing_installed_still_cpu(self):
         assert resolve_backend(probe(silicon=False, ort=False, coreml=False)) is ComputeBackend.CPU
@@ -61,3 +71,5 @@ class TestProviderConfig:
         assert compute_units_label(ComputeBackend.COREML_GPU_CPU) == "CPUAndGPU"
         assert compute_units_label(ComputeBackend.COREML_ANE) == "All"
         assert compute_units_label(ComputeBackend.CPU) == "cpu"
+        assert compute_units_label(ComputeBackend.CUDA) == "cuda"
+        assert compute_units_label(ComputeBackend.TORCH_CPU) == "torch-cpu"
